@@ -1,0 +1,5 @@
+.venv/
+__pycache__/
+.pytest_cache/
+sortie/
+.claude/py_modifie

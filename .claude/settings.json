@@ -1,0 +1,37 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Edit(**/*.py)",
+            "shell": "bash",
+            "timeout": 120,
+            "command": "touch \"${CLAUDE_PROJECT_DIR}/.claude/py_modifie\"; cd \"${CLAUDE_PROJECT_DIR}\" && .venv/Scripts/python.exe -m pytest -q 1>&2 || exit 2"
+          },
+          {
+            "type": "command",
+            "if": "Write(**/*.py)",
+            "shell": "bash",
+            "timeout": 120,
+            "command": "touch \"${CLAUDE_PROJECT_DIR}/.claude/py_modifie\"; cd \"${CLAUDE_PROJECT_DIR}\" && .venv/Scripts/python.exe -m pytest -q 1>&2 || exit 2"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "timeout": 120,
+            "command": "test -f \"${CLAUDE_PROJECT_DIR}/.claude/py_modifie\" || exit 0; cd \"${CLAUDE_PROJECT_DIR}\" && .venv/Scripts/python.exe -m pytest -q 1>&2 || exit 2; rm -f \"${CLAUDE_PROJECT_DIR}/.claude/py_modifie\""
+          }
+        ]
+      }
+    ]
+  }
+}
