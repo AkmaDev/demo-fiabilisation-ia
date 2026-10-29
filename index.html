@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vérificateur de fiches entreprises</title>
+<meta name="description" content="Démonstration : contrôler les fiches d'entreprises produites par un agent IA avant de s'en servir, en les confrontant à la base officielle SIRENE.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Une colonne de lecture : la saisie, puis le verdict, puis l'explication. */
+:root{
+  --bg:#f5f7f6; --panel:#ffffff; --fg:#1b2420; --muted:#5a6661; --line:#d8dfdb;
+  --accent:#1f6f5c; --accent-fg:#ffffff;
+  --ok:#25794a; --ok-bg:#e3f2e8; --warn:#9a5d00; --warn-bg:#fbefd9; --ko:#b3261e; --ko-bg:#fbe4e2;
+  --f-body:"IBM Plex Sans", system-ui, sans-serif; --f-mono:"IBM Plex Mono", ui-monospace, Consolas, monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#111715; --panel:#19211e; --fg:#e3ebe7; --muted:#9aa8a2; --line:#2b3632;
+  --accent:#5cc2a6; --accent-fg:#0d1a16;
+  --ok:#6fcf97; --ok-bg:#1b3325; --warn:#f0b65a; --warn-bg:#3a2c14; --ko:#f2877f; --ko-bg:#3b1d1b; color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 var(--f-body)}
+.wrap{max-width:920px;margin:0 auto;padding-block:32px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:28px}
+h1{font-size:clamp(1.6rem,4vw,2.2rem);line-height:1.15;margin:0;text-wrap:balance}
+h2{font-size:1.05rem;margin:0 0 10px}
+p{margin:0;max-width:68ch}
+.lead{color:var(--muted);margin-top:10px}
+a{color:var(--accent)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px;min-width:0}
+label{font-weight:500;display:block;margin-bottom:6px}
+textarea{width:100%;min-height:190px;font:13px/1.6 var(--f-mono);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;resize:vertical}
+textarea:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px}
+button{font:inherit;font-weight:600;padding:9px 18px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-fg);cursor:pointer}
+button.ghost{background:transparent;color:var(--accent)}
+button:disabled{opacity:.5;cursor:wait}
+.etat{color:var(--muted);font-size:.9rem}
+.bilan{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.chiffre{border-radius:10px;padding:14px 16px}
+.chiffre b{display:block;font-size:1.8rem;line-height:1.1;font-variant-numeric:tabular-nums}
+.chiffre span{font-size:.85rem}
+.c-ok{background:var(--ok-bg);color:var(--ok)} .c-warn{background:var(--warn-bg);color:var(--warn)} .c-ko{background:var(--ko-bg);color:var(--ko)}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.74rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500}
+td.mono{font-family:var(--f-mono);font-size:.82rem;white-space:nowrap}
+.pill{display:inline-block;font-size:.78rem;font-weight:600;padding:2px 9px;border-radius:999px;white-space:nowrap}
+.p-verifiee{background:var(--ok-bg);color:var(--ok)} .p-a_corriger{background:var(--warn-bg);color:var(--warn)} .p-bloquee{background:var(--ko-bg);color:var(--ko)}
+.prop{border-left:3px solid var(--warn);padding:10px 14px;background:var(--warn-bg);border-radius:6px;display:grid;gap:4px;font-size:.92rem}
+.prop + .prop{margin-top:10px}
+.note{font-size:.88rem;color:var(--muted)}
+ul.regles{margin:8px 0 0;padding-left:18px;display:grid;gap:6px}
+@media (max-width:520px){.bilan{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:no-preference){.chiffre,.panel{transition:background .2s}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Vérificateur de fiches entreprises</h1>
+  <p class="lead">Un agent IA de prospection produit des fiches d'entreprises. Avant qu'un commercial s'en serve, chaque fiche est confrontée à la base officielle de l'État (SIRENE) et classée <b>vérifiée</b>, <b>à corriger</b> ou <b>bloquée</b>. Dans le doute, la fiche est bloquée.</p>
+  <p class="note" style="margin-top:8px">Le code qui tourne dans cette page est exactement le fichier <code>verifier.py</code> testé dans le dépôt, exécuté dans votre navigateur. <a href="https://github.com/AkmaDev/demo-fiabilisation-ia">Voir le dépôt et les tests</a>.</p>
+</header>
+
+<section class="panel">
+  <label for="saisie">Fiches à vérifier (format CSV : nom, siret, code_postal)</label>
+  <textarea id="saisie" spellcheck="false">Chargement des exemples…</textarea>
+  <div class="row">
+    <button id="lancer" type="button" disabled>Vérifier</button>
+    <button id="exemple" type="button" class="ghost" disabled>Remettre l'exemple</button>
+    <span id="etat" class="etat" role="status">Chargement de Python dans le navigateur (quelques secondes la première fois)…</span>
+  </div>
+  <p class="note" style="margin-top:10px">Vous pouvez modifier les lignes ou en ajouter (20 au maximum). Rien n'est enregistré : seules des requêtes vers l'API publique <a href="https://recherche-entreprises.api.gouv.fr">Recherche d'entreprises</a> quittent la page.</p>
+</section>
+
+<section id="resultats" hidden>
+  <div class="bilan">
+    <div class="chiffre c-ok"><b id="n-ok">0</b><span>vérifiées</span></div>
+    <div class="chiffre c-warn"><b id="n-warn">0</b><span>à corriger</span></div>
+    <div class="chiffre c-ko"><b id="n-ko">0</b><span>bloquées</span></div>
+  </div>
+  <div class="panel tbl" style="margin-top:14px">
+    <table>
+      <thead><tr><th>Fiche</th><th>SIRET saisi</th><th>Statut</th><th>Raison</th><th>Base officielle</th></tr></thead>
+      <tbody id="lignes"></tbody>
+    </table>
+  </div>
+  <div id="bloc-props" class="panel" style="margin-top:14px" hidden>
+    <h2>Corrections proposées, à valider par un humain</h2>
+    <div id="props"></div>
+    <p class="note" style="margin-top:10px">Les fiches saisies ne sont jamais modifiées : une correction est seulement proposée, avec sa preuve.</p>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Les règles appliquées</h2>
+  <ul class="regles">
+    <li>Un SIRET mal formé (14 chiffres et chiffre de contrôle) est bloqué sans interroger la base.</li>
+    <li>API en panne, réponse inexploitable, plusieurs résultats ou SIRET différent : bloquée.</li>
+    <li>Entreprise cessée ou établissement fermé : bloquée.</li>
+    <li>Entreprise non diffusible : bloquée, aucune donnée recopiée. Les dirigeants ne sont jamais recopiés.</li>
+    <li>Code postal différent de la base officielle : à corriger, avec une proposition et sa preuve.</li>
+  </ul>
+  <p class="note" style="margin-top:12px">Chaque règle est protégée par un test qui échoue si on la retire. Limites : le premier chargement est plus lent, la page dépend de la disponibilité de l'API publique, et elle ne vérifie que ce que la base officielle contient.</p>
+</section>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const MAX_LIGNES = 20;
+let py = null, exemple = "";
+
+// Pont minimal : le CSV est lu et chaque fiche est jugée par verifier.py lui-même.
+const PONT = `
+import csv, io, json
+import verifier
+
+def lire_fiches(texte):
+    return json.dumps(list(csv.DictReader(io.StringIO(texte))), ensure_ascii=False)
+
+def juger(fiche_json, reponse_json, erreur):
+    fiche = json.loads(fiche_json)
+    def obtenir(siret):
+        if erreur:
+            raise ConnectionError(erreur)
+        return json.loads(reponse_json)
+    return json.dumps(verifier.verifier_fiche(fiche, obtenir), ensure_ascii=False)
+`;
+
+function echapper(t) {
+  return String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+const LIBELLES = { verifiee: "vérifiée", a_corriger: "à corriger", bloquee: "bloquée" };
+
+async function demarrer() {
+  try {
+    const [code, csv] = await Promise.all([
+      fetch("verifier.py").then((r) => { if (!r.ok) throw new Error("verifier.py introuvable"); return r.text(); }),
+      fetch("data/prospects_exemple.csv").then((r) => (r.ok ? r.text() : "")),
+    ]);
+    exemple = csv.trim();
+    $("saisie").value = exemple;
+    py = await loadPyodide();
+    py.FS.writeFile("verifier.py", code);
+    py.runPython(PONT);
+    $("lancer").disabled = false;
+    $("exemple").disabled = false;
+    $("etat").textContent = "Prêt.";
+  } catch (e) {
+    $("etat").textContent = "Impossible de charger le vérificateur : " + e.message;
+  }
+}
+
+async function interroger(siret, api) {
+  try {
+    const r = await fetch(api + "?q=" + encodeURIComponent(siret));
+    if (!r.ok) return { erreur: "HTTP " + r.status };
+    return { reponse: await r.text() };
+  } catch (e) {
+    return { erreur: "réseau indisponible" };
+  }
+}
+
+async function lancer() {
+  $("lancer").disabled = true;
+  const fiches = JSON.parse(py.globals.get("lire_fiches")($("saisie").value));
+  if (!fiches.length || !("siret" in fiches[0])) {
+    $("etat").textContent = "La première ligne doit être : nom,siret,code_postal";
+    $("lancer").disabled = false;
+    return;
+  }
+  const lot = fiches.slice(0, MAX_LIGNES);
+  const api = py.runPython("verifier.API");
+  const valide = py.runPython("verifier.siret_valide");
+  const juger = py.globals.get("juger");
+  const verdicts = [];
+  for (let i = 0; i < lot.length; i++) {
+    const f = { nom: lot[i].nom ?? "", siret: lot[i].siret ?? "", code_postal: lot[i].code_postal ?? "" };
+    $("etat").textContent = `Vérification ${i + 1} / ${lot.length}…`;
+    let reponse = "null", erreur = "";
+    if (valide(f.siret.trim())) {
+      const r = await interroger(f.siret.trim(), api);
+      reponse = r.reponse ?? "null";
+      erreur = r.erreur ?? "";
+      await new Promise((ok) => setTimeout(ok, 200));
+    }
+    verdicts.push({ fiche: f, v: JSON.parse(juger(JSON.stringify(f), reponse, erreur)) });
+  }
+  afficher(verdicts);
+  const reste = fiches.length - lot.length;
+  $("etat").textContent = reste > 0 ? `Terminé. ${reste} ligne(s) au-delà de ${MAX_LIGNES} ignorée(s).` : "Terminé.";
+  $("lancer").disabled = false;
+}
+
+function afficher(verdicts) {
+  const compte = (s) => verdicts.filter((x) => x.v.statut === s).length;
+  $("n-ok").textContent = compte("verifiee");
+  $("n-warn").textContent = compte("a_corriger");
+  $("n-ko").textContent = compte("bloquee");
+  $("lignes").innerHTML = verdicts.map(({ fiche, v }) => {
+    const o = v.officiel || {};
+    const officiel = o.nom_complet ? `${echapper(o.nom_complet)}<br><span class="note">${echapper(o.code_postal)} ${echapper(o.commune)}</span>` : "<span class=\"note\">—</span>";
+    return `<tr><td>${echapper(fiche.nom)}</td><td class="mono">${echapper(fiche.siret)}</td><td><span class="pill p-${v.statut}">${LIBELLES[v.statut]}</span></td><td>${echapper(v.raison)}</td><td>${officiel}</td></tr>`;
+  }).join("");
+  const props = verdicts.map((x) => x.v.proposition).filter(Boolean);
+  $("bloc-props").hidden = props.length === 0;
+  const date = (iso) => new Date(iso).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" });
+  $("props").innerHTML = props.map((p) => `<div class="prop"><b>${echapper(p.nom)}</b><span>${echapper(p.champ.replace("_", " "))} : ${echapper(p.ancienne)} → <b>${echapper(p.nouvelle)}</b></span><span class="note">Preuve : <a href="${echapper(p.preuve.source)}" target="_blank" rel="noopener">base officielle</a>, consultée le ${echapper(date(p.preuve.date))}</span></div>`).join("");
+  $("resultats").hidden = false;
+}
+
+$("lancer").addEventListener("click", lancer);
+$("exemple").addEventListener("click", () => { $("saisie").value = exemple; });
+demarrer();
+</script>
+</body>
+</html>

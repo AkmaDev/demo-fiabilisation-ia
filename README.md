@@ -2,6 +2,8 @@
 
 Une démonstration courte : comment empêcher un outil de données, écrit par un agent IA, d'afficher une information fausse comme « vérifiée ».
 
+**👉 [Essayer dans le navigateur](https://akmadev.github.io/demo-fiabilisation-ia/)**, sans rien installer. La page exécute le fichier `verifier.py` testé ici, tel quel (avec [Pyodide](https://pyodide.org), Python dans le navigateur) : aucune logique n'est réécrite en JavaScript, et un test (`tests/test_page.py`) y veille.
+
 **Le cas** : un agent IA de prospection cherche des entreprises sur le web et produit des fiches (nom, SIRET, code postal) pour une équipe commerciale. Avant qu'un commercial s'en serve, `verifier.py` compare ce que l'IA affirme à la base officielle (API publique [Recherche d'entreprises](https://recherche-entreprises.api.gouv.fr), données SIRENE) et range chaque fiche en **vérifiée**, **à corriger** ou **bloquée**.
 
 **Qui fait quoi** : le code et les tests sont écrits par un agent IA (Claude Code). Je cadre le travail, j'écris les règles, je vérifie les résultats et je décide de ce qui est accepté.
