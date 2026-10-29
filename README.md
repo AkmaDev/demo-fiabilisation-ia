@@ -2,9 +2,27 @@
 
 Une démonstration courte : comment empêcher un outil de données, écrit par un agent IA, d'afficher une information fausse comme « vérifiée ».
 
-**Le cas** : une équipe commerciale saisit à la main des fiches d'entreprises (nom, SIRET, code postal). Avant de les utiliser, `verifier.py` les compare à la base officielle (API publique [Recherche d'entreprises](https://recherche-entreprises.api.gouv.fr), données SIRENE) et range chaque fiche en **vérifiée**, **à corriger** ou **bloquée**.
+**Le cas** : un agent IA de prospection cherche des entreprises sur le web et produit des fiches (nom, SIRET, code postal) pour une équipe commerciale. Avant qu'un commercial s'en serve, `verifier.py` compare ce que l'IA affirme à la base officielle (API publique [Recherche d'entreprises](https://recherche-entreprises.api.gouv.fr), données SIRENE) et range chaque fiche en **vérifiée**, **à corriger** ou **bloquée**.
 
 **Qui fait quoi** : le code et les tests sont écrits par un agent IA (Claude Code). Je cadre le travail, j'écris les règles, je vérifie les résultats et je décide de ce qui est accepté.
+
+## L'IA est contrôlée à deux endroits
+
+| Où | Ce que l'IA peut faire de travers | Ce qui le rattrape |
+|---|---|---|
+| **Dans les données qu'elle produit** | Inventer une entreprise ou un SIRET, donner une information périmée, confondre deux entreprises, se tromper d'adresse, mal recopier un numéro | Le vérificateur : chaque fiche est comparée à la base officielle, et bloquée en cas de doute |
+| **Dans le code qu'elle écrit** | Des tests « au vert » qui ne protègent pas tout | Les tests de mutation : on casse le code exprès pour vérifier que les tests le remarquent |
+
+| Erreur typique d'un agent IA | Fiche d'exemple ou test qui la reproduit | Résultat |
+|---|---|---|
+| Entreprise inventée (hallucination) | « Entreprise inventée par l'agent » | bloquée : SIRET introuvable |
+| Information périmée | Camaïeu (cessée fin 2023) | bloquée : entreprise cessée |
+| Adresse erronée | Fnac Darty, code postal 75001 | à corriger : 94200, avec la preuve |
+| Numéro mal recopié | « Doctolib (dernier chiffre faux) » | bloquée avant même d'interroger la base |
+| Zéro initial perdu à l'export | « Fnac Darty (SIRET tronqué à l'export) » | bloquée : 13 chiffres |
+| Confusion avec une autre entreprise | état « autre_entreprise » de la matrice de tests | bloquée : SIRET différent |
+
+Les fiches d'exemple n'ont pas été produites par un vrai agent : elles ont été construites à la main pour reproduire ces erreurs typiques, sur des entreprises dont les données sont publiques.
 
 ## Le circuit
 
@@ -58,5 +76,4 @@ Dans `verifier.py`, remplacer `return _verdict("a_corriger"` par `return _verdic
 - Les tests utilisent des réponses d'API fabriquées. Un changement de format de l'API réelle serait bloqué (réponse inexploitable), mais n'est pas testé contre l'API réelle elle-même.
 - L'exécution réelle a porté sur 7 fiches d'exemple, une fois.
 - Les mutations sont écrites à la main ; elles ne couvrent que les règles listées dans `outils/mutations.py`.
-
-Les exemples utilisent des entreprises dont les données sont publiques, plus une entreprise inventée.
+- Le vérificateur ne contrôle que ce qui existe dans la base officielle (identité, état, code postal). Une information que la base ne contient pas (un téléphone, un nom de contact) ne peut pas être vérifiée par cet outil.

@@ -1,6 +1,7 @@
 """Vérifie des fiches prospects d'entreprises contre l'API publique Recherche d'entreprises.
 
-Chaque fiche (nom, SIRET, code postal) reçoit un statut : « verifiee », « a_corriger » ou
+Les fiches peuvent venir d'un agent IA de prospection : rien de ce qu'il affirme n'est
+utilisé sans être confronté à la base officielle. Chaque fiche (nom, SIRET, code postal) reçoit un statut : « verifiee », « a_corriger » ou
 « bloquee ». Le fichier d'entrée n'est jamais modifié : les corrections sont proposées
 dans sortie/propositions.json et attendent une validation humaine.
 
