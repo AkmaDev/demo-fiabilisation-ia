@@ -1,7 +1,8 @@
 """Vérifie des fiches prospects d'entreprises contre l'API publique Recherche d'entreprises.
 
 Les fiches peuvent venir d'un agent IA de prospection : rien de ce qu'il affirme n'est
-utilisé sans être confronté à la base officielle. Chaque fiche (nom, SIRET, code postal) reçoit un statut : « verifiee », « a_corriger » ou
+utilisé sans être confronté à la base officielle. Chaque fiche (nom, SIRET, code postal)
+reçoit un statut : « verifiee », « a_corriger » (une valeur sûre est proposée) ou
 « bloquee ». Le fichier d'entrée n'est jamais modifié : les corrections sont proposées
 dans sortie/propositions.json et attendent une validation humaine.
 
@@ -10,13 +11,45 @@ Usage : python verifier.py data/prospects_exemple.csv [--sortie sortie]
 import argparse
 import csv
 import json
+import re
 import sys
 import time
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
 API = "https://recherche-entreprises.api.gouv.fr/search"
-CHAMPS_OFFICIELS = ("nom_complet", "siret", "code_postal", "commune", "activite_principale")
+CHAMPS_OFFICIELS = ("nom_complet", "noms", "siret", "code_postal", "commune", "activite_principale")
+FORMES_JURIDIQUES = {"SA", "SAS", "SASU", "SARL", "EURL", "SNC", "SCI", "SCOP", "GMBH", "LTD"}
+
+
+def normaliser_nom(nom):
+    """Majuscules, sans accents ni ponctuation, sans forme juridique (« Fnac-Darty S.A. » → « FNAC DARTY »)."""
+    texte = unicodedata.normalize("NFKD", nom or "")
+    texte = "".join(c for c in texte if not unicodedata.combining(c)).upper().replace(".", "")
+    mots = re.sub(r"[^A-Z0-9]+", " ", texte).split()
+    return " ".join(m for m in mots if m not in FORMES_JURIDIQUES)
+
+
+def noms_officiels(ent, etab):
+    """Tous les noms sous lesquels la base connaît cet établissement."""
+    noms = [ent.get("nom_raison_sociale"), ent.get("nom_complet"), ent.get("sigle"), etab.get("nom_commercial")]
+    noms += etab.get("liste_enseignes") or []
+    complet = ent.get("nom_complet") or ""
+    noms += re.findall(r"\(([^)]*)\)", complet)  # « JUNG S.A.S (BACK MARKET) » → « BACK MARKET »
+    noms.append(re.sub(r"\([^)]*\)", " ", complet))
+    vus = []
+    for n in noms:
+        if n and n.strip() and n.strip() not in vus:
+            vus.append(n.strip())
+    return vus
+
+
+def nom_correspond(nom_saisi, officiels):
+    """Égalité stricte après normalisation : « contenu dans » accepterait des confusions (CSE LEBONCOIN)."""
+    saisi = normaliser_nom(nom_saisi)
+    normalises = {normaliser_nom(n) for n in officiels}
+    return saisi != "" and saisi in normalises
 
 
 class ReponseInvalide(Exception):
@@ -81,13 +114,18 @@ def verifier_fiche(fiche, obtenir):
     if ent.get("etat_administratif") != "A" or etab.get("etat_administratif") != "A":
         return _verdict("bloquee", "entreprise cessée ou établissement fermé")
 
+    officiels = noms_officiels(ent, etab)
     officiel = {
         "nom_complet": ent.get("nom_complet"),
+        "noms": " / ".join(officiels),
         "siret": etab["siret"],
         "code_postal": etab.get("code_postal"),
         "commune": etab.get("libelle_commune"),
         "activite_principale": ent.get("activite_principale"),
     }
+    # On ne sait pas lequel du nom ou du SIRET est faux : aucune valeur sûre à proposer.
+    if not nom_correspond(fiche["nom"], officiels):
+        return _verdict("bloquee", "le nom ne correspond pas à ce SIRET : le nom ou le SIRET est faux", officiel)
     if fiche["code_postal"].strip() != officiel["code_postal"]:
         proposition = {
             "nom": fiche["nom"],

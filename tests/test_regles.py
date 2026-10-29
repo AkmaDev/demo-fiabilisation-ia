@@ -6,7 +6,7 @@ import json
 import pytest
 
 from tests.fabrique import SIRET, entreprise, etablissement, reponse
-from verifier import code_sortie, siret_valide, traiter, verifier_fiche
+from verifier import code_sortie, normaliser_nom, siret_valide, traiter, verifier_fiche
 
 
 @pytest.mark.parametrize(
@@ -35,7 +35,7 @@ def test_siret_valide(siret, attendu):
     ],
 )
 def test_reponse_invalide_bloque_avec_la_bonne_raison(donnees):
-    fiche = {"nom": "x", "siret": SIRET, "code_postal": "75011"}
+    fiche = {"nom": "Entreprise fictive", "siret": SIRET, "code_postal": "75011"}
     verdict = verifier_fiche(fiche, lambda s: donnees)
     assert verdict["statut"] == "bloquee"
     # Une API cassée ne doit pas se faire passer pour un SIRET inexistant.
@@ -51,14 +51,65 @@ def test_code_de_sortie_signale_les_fiches_bloquees(statuts, attendu):
 
 
 def test_officiel_ne_contient_que_les_champs_utiles():
-    fiche = {"nom": "x", "siret": SIRET, "code_postal": "75011"}
+    fiche = {"nom": "Entreprise fictive", "siret": SIRET, "code_postal": "75011"}
     verdict = verifier_fiche(fiche, lambda s: reponse(entreprise([etablissement()])))
     assert verdict["statut"] == "verifiee"
-    assert set(verdict["officiel"]) == {"nom_complet", "siret", "code_postal", "commune", "activite_principale"}
+    assert set(verdict["officiel"]) == {"nom_complet", "noms", "siret", "code_postal", "commune", "activite_principale"}
+
+
+@pytest.mark.parametrize(
+    "saisi, officiel, attendu",
+    [
+        ("Fnac-Darty S.A.", "FNAC DARTY", "FNAC DARTY"),
+        ("Société Générale", "SOCIETE GENERALE", "SOCIETE GENERALE"),
+        ("JUNG S.A.S", "JUNG", "JUNG"),
+        ("SAS", "", ""),
+    ],
+)
+def test_normaliser_nom(saisi, officiel, attendu):
+    assert normaliser_nom(saisi) == normaliser_nom(officiel) == attendu
+
+
+def _verdict_nom(nom, ent):
+    return verifier_fiche({"nom": nom, "siret": SIRET, "code_postal": "75011"}, lambda s: reponse(ent))
+
+
+@pytest.mark.parametrize(
+    "nom_saisi, ent",
+    [
+        # Nom légal COMUTO, enseigne BLABLACAR (réponse réelle de l'API, 29/10/2026).
+        ("BlaBlaCar", entreprise([etablissement(enseignes=["BLABLACAR"])], nom="COMUTO")),
+        ("Comuto", entreprise([etablissement(enseignes=["BLABLACAR"])], nom="COMUTO")),
+        # Nom commercial entre parenthèses (réponse réelle pour Back Market).
+        ("Back Market", entreprise([etablissement()], nom="JUNG S.A.S (BACK MARKET) (J.G)", sigle="J.G")),
+        ("Fnac Darty", entreprise([etablissement()], nom="FNAC DARTY")),
+    ],
+)
+def test_nom_commercial_ou_legal_accepte(nom_saisi, ent):
+    assert _verdict_nom(nom_saisi, ent)["statut"] == "verifiee"
+
+
+@pytest.mark.parametrize(
+    "nom_saisi, ent",
+    [
+        # Reproduction de la relecture externe : le nom de BlaBlaCar avec le SIRET de Doctolib.
+        ("BlaBlaCar", entreprise([etablissement()], nom="DOCTOLIB")),
+        # « Contenu dans » ne suffit pas : ce sont d'autres entités (réponses réelles de l'API).
+        ("Leboncoin", entreprise([etablissement()], nom="CSE LEBONCOIN")),
+        ("Back Market", entreprise([etablissement()], nom="BACK UP MARKET")),
+        ("", entreprise([etablissement()])),
+    ],
+)
+def test_nom_incoherent_bloque(nom_saisi, ent):
+    verdict = _verdict_nom(nom_saisi, ent)
+    assert verdict["statut"] == "bloquee"
+    assert verdict["raison"].startswith("le nom ne correspond pas")
+    assert verdict["proposition"] is None
+    assert verdict["officiel"]["noms"], "les noms officiels doivent être montrés pour que l'humain tranche"
 
 
 def test_non_diffusible_ne_recopie_rien():
-    fiche = {"nom": "x", "siret": SIRET, "code_postal": "75011"}
+    fiche = {"nom": "Entreprise fictive", "siret": SIRET, "code_postal": "75011"}
     verdict = verifier_fiche(fiche, lambda s: reponse(entreprise([etablissement()], diffusion="P")))
     assert verdict["statut"] == "bloquee"
     assert verdict["officiel"] == {}
@@ -68,7 +119,7 @@ def test_la_commande_echoue_s_il_reste_une_fiche_bloquee(tmp_path, monkeypatch):
     import verifier
 
     entree = _ecrire_entree(tmp_path, [
-        {"nom": "ok", "siret": SIRET, "code_postal": "75011"},
+        {"nom": "Entreprise fictive", "siret": SIRET, "code_postal": "75011"},
         {"nom": "faute de frappe", "siret": SIRET[:13], "code_postal": "75011"},
     ])
     monkeypatch.setattr(verifier, "obtenir_depuis_api", lambda s, session=None: reponse(entreprise([etablissement()])))
@@ -87,8 +138,8 @@ def _ecrire_entree(dossier, lignes):
 
 def test_traiter_ne_modifie_pas_l_entree_et_ne_recopie_pas_les_dirigeants(tmp_path):
     entree = _ecrire_entree(tmp_path, [
-        {"nom": "ok", "siret": SIRET, "code_postal": "75011"},
-        {"nom": "cp faux", "siret": SIRET, "code_postal": "75012"},
+        {"nom": "Entreprise fictive", "siret": SIRET, "code_postal": "75011"},
+        {"nom": "Entreprise fictive", "siret": SIRET, "code_postal": "75012"},
     ])
     empreinte = hashlib.sha256(entree.read_bytes()).hexdigest()
 

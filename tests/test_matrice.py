@@ -11,6 +11,9 @@ FICHES = {
     "fiche_correcte": {"nom": "Entreprise fictive", "siret": SIRET, "code_postal": "75011"},
     "cle_fausse": {"nom": "Entreprise fictive", "siret": SIRET[:-1] + str((int(SIRET[-1]) + 1) % 10), "code_postal": "75011"},
     "code_postal_faux": {"nom": "Entreprise fictive", "siret": SIRET, "code_postal": "75012"},
+    # Le SIRET d'une entreprise sous le nom d'une autre (la confusion que le README dit rattraper).
+    "nom_different": {"nom": "Autre société", "siret": SIRET, "code_postal": "75011"},
+    "nom_et_code_postal_faux": {"nom": "Autre société", "siret": SIRET, "code_postal": "75012"},
 }
 
 # Statut attendu pour chaque combinaison. Seules deux combinaisons ne sont pas bloquées.
@@ -40,6 +43,10 @@ def test_matrice(etat_fiche, etat_api):
         assert verdict["proposition"]["nouvelle"] == "75011"
     else:
         assert verdict["proposition"] is None
+    if etat_fiche.startswith("nom_") and etat_api == "correcte":
+        # Bloquée pour le nom, pas pour le code postal : l'humain doit voir la vraie raison.
+        assert verdict["raison"] == "le nom ne correspond pas à ce SIRET : le nom ou le SIRET est faux"
+        assert verdict["officiel"]["noms"] == "ENTREPRISE FICTIVE"
 
 
 def test_panne_reseau_bloque():

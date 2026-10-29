@@ -26,6 +26,12 @@ MUTATIONS = [
     ("proposition non écrite", 'propositions = [v["proposition"] for v in verdicts if v["proposition"]]', "propositions = []"),
     ("code de sortie toujours 0", 'return 1 if any(v["statut"] == "bloquee" for v in verdicts) else 0', "return 0"),
     ("main ignore le code de sortie", "    return code_sortie(verdicts)", "    return 0"),
+    ("nom jamais comparé", 'if not nom_correspond(fiche["nom"], officiels):', "if False:"),
+    ("égalité du nom remplacée par « contenu dans »", 'return saisi != "" and saisi in normalises',
+     'return saisi != "" and any(saisi in n for n in normalises)'),
+    ("enseignes ignorées", 'noms += etab.get("liste_enseignes") or []', "noms += []"),
+    ("nom entre parenthèses ignoré", 'noms += re.findall(r"\\(([^)]*)\\)", complet)', "noms += []"),
+    ("nom vide accepté", 'return saisi != "" and saisi in normalises', "return saisi in normalises or saisi == \"\""),
 ]
 
 

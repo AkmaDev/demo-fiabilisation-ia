@@ -23,19 +23,23 @@ SIRET = avec_cle("1234567800001")
 AUTRE_SIRET = avec_cle("9876543200001")
 
 
-def etablissement(siret=SIRET, code_postal="75011", etat="A"):
+def etablissement(siret=SIRET, code_postal="75011", etat="A", enseignes=None, nom_commercial=None):
     return {
         "siret": siret,
         "code_postal": code_postal,
         "libelle_commune": "PARIS",
         "etat_administratif": etat,
+        "liste_enseignes": enseignes,
+        "nom_commercial": nom_commercial,
     }
 
 
-def entreprise(etabs, etat="A", diffusion="O"):
+def entreprise(etabs, etat="A", diffusion="O", nom="ENTREPRISE FICTIVE", sigle=None):
     return {
         "siren": etabs[0]["siret"][:9],
-        "nom_complet": "ENTREPRISE FICTIVE",
+        "nom_complet": nom,
+        "nom_raison_sociale": nom,
+        "sigle": sigle,
         "activite_principale": "62.01Z",
         "etat_administratif": etat,
         "statut_diffusion": diffusion,
